@@ -1,0 +1,118 @@
+---
+title: "Environment Variables"
+description: "Environment variables that act reads from the host and injects into workflow containers."
+---
+
+act interacts with environment variables in two directions:
+
+1. **Host environment variables** — variables that act reads from the shell where it is invoked to configure its own behavior.
+2. **Container environment variables** — variables that act injects into every workflow container to replicate what GitHub's hosted runners provide.
+
+---
+
+## Host environment variables
+
+These variables are read by act from the host environment when it starts.
+
+### `DOCKER_HOST`
+
+The URI of the Docker daemon to connect to (e.g. `unix:///var/run/docker.sock` or `tcp://127.0.0.1:2375`).
+
+act reads `DOCKER_HOST` first when resolving which Docker daemon to use. If it is not set, act searches for a socket file in a list of common locations:
+
+- `/var/run/docker.sock`
+- `/run/podman/podman.sock`
+- `$HOME/.colima/docker.sock`
+- `$XDG_RUNTIME_DIR/docker.sock`
+- `$XDG_RUNTIME_DIR/podman/podman.sock`
+- `\\.\pipe\docker_engine` (Windows named pipe)
+- `$HOME/.docker/run/docker.sock`
+
+Once resolved, act sets `DOCKER_HOST` in its own environment so that child processes (such as Docker CLI invocations from action scripts) use the same daemon.
+
+You can override the socket path with `--container-daemon-socket`. Pass `-` to that flag to prevent act from bind-mounting the socket into containers.
+
+### `GITHUB_TOKEN`
+
+A GitHub personal access token (PAT) or installation token used to authenticate API requests made by actions.
+
+act looks for `GITHUB_TOKEN` in this order:
+
+1. Secrets passed via `--secret GITHUB_TOKEN=<token>` or `--secret-file`.
+2. The output of the `gh` CLI (`gh auth token`), if the `gh` binary is installed and authenticated.
+
+If no token is found, `GITHUB_TOKEN` is set to an empty string inside containers. Actions that make authenticated GitHub API calls will fail without a valid token.
+
+<Tip>
+  The easiest way to pass your token is `act -s GITHUB_TOKEN="$(gh auth token)"` or by adding `GITHUB_TOKEN=<your-token>` to your `.secrets` file.
+</Tip>
+
+### `HOME`
+
+The current user's home directory. act uses this for XDG config path resolution when `XDG_CONFIG_HOME` is not set, and for locating the `.actrc` config file at `$HOME/.actrc`.
+
+### `ACTIONS_CACHE_URL`
+
+If this variable is already set in the host environment, act will **not** start its own built-in cache server. Instead, containers will use the URL in `ACTIONS_CACHE_URL` directly. This lets you point act at an external cache backend (for example, a self-hosted instance of the GitHub Actions cache service).
+
+When `ACTIONS_CACHE_URL` is not set, act starts its own cache server and injects the resulting URL into container environments automatically.
+
+---
+
+## Container environment variables
+
+act injects the following variables into every workflow container to match the environment that GitHub's hosted runners provide. These mirror the [default environment variables](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#default-environment-variables) documented by GitHub.
+
+<Note>
+  The values act uses are derived from the local git repository and the flags you pass. They may differ from what GitHub would set for the same workflow because act runs against your local working tree, not a GitHub-managed clone.
+</Note>
+
+### Workflow context
+
+| Variable | Description |
+|---|---|
+| `GITHUB_WORKFLOW` | Name of the workflow as defined in the `name` field of the workflow file. |
+| `GITHUB_RUN_ID` | A unique identifier for the workflow run. act generates or inherits this value. |
+| `GITHUB_RUN_NUMBER` | Run number for this workflow. Increments with each run of the same workflow. |
+| `GITHUB_ACTION` | The name or ID of the currently executing action. |
+
+### Repository and actor context
+
+| Variable | Description |
+|---|---|
+| `GITHUB_ACTOR` | The username of the user or app that triggered the workflow. Set from `--actor` (default: `nektos/act`). |
+| `GITHUB_REPOSITORY` | The owner and repository name in `owner/repo` format. Derived from the git remote URL. |
+
+### Event context
+
+| Variable | Description |
+|---|---|
+| `GITHUB_EVENT_NAME` | The name of the event that triggered the workflow (e.g. `push`, `pull_request`). |
+| `GITHUB_EVENT_PATH` | Path to a JSON file inside the container containing the full event payload. |
+
+### Checkout and workspace
+
+| Variable | Description |
+|---|---|
+| `GITHUB_WORKSPACE` | The default working directory inside the container where the repository is checked out. |
+| `GITHUB_SHA` | The commit SHA that triggered the workflow run. |
+| `GITHUB_REF` | The fully-formed ref that triggered the run (e.g. `refs/heads/main`). |
+| `GITHUB_HEAD_REF` | For pull request events: the head branch name. Empty for other events. |
+| `GITHUB_BASE_REF` | For pull request events: the base branch name. Empty for other events. |
+
+### GitHub API endpoints
+
+| Variable | Description |
+|---|---|
+| `GITHUB_SERVER_URL` | The URL of the GitHub server. Default: `https://github.com`. Set to your GitHub Enterprise Server URL when using `--github-instance`. |
+| `GITHUB_API_URL` | The URL of the GitHub REST API. Default: `https://api.github.com`. |
+| `GITHUB_GRAPHQL_URL` | The URL of the GitHub GraphQL API. Default: `https://api.github.com/graphql`. |
+
+### Runner context
+
+| Variable | Description |
+|---|---|
+| `RUNNER_OS` | The operating system of the runner. act always sets this to `Linux`. |
+| `RUNNER_ARCH` | The CPU architecture of the runner. act derives this from the Docker host info (e.g. `X64`, `ARM64`). |
+| `RUNNER_TEMP` | The path to a temporary directory on the runner. Set to `/tmp`. |
+| `RUNNER_TOOL_CACHE` | The path to the directory where pre-installed tools are cached. Set to `/opt/hostedtoolcache`. |

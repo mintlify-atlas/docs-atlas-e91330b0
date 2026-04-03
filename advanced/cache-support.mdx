@@ -1,0 +1,124 @@
+---
+title: "Actions Cache Support"
+description: "Use act's built-in cache server to run workflows that depend on actions/cache locally."
+---
+
+act includes a built-in cache server that emulates GitHub's Actions cache API. This allows steps using `actions/cache` to save and restore dependency caches between workflow runs, just as they would on GitHub.
+
+## How it works
+
+The cache server is **enabled by default**. When act starts, it launches a local HTTP server that implements the `/_apis/artifactcache` endpoints. act automatically injects the `ACTIONS_CACHE_URL` environment variable into each container so that `actions/cache` points to the local server instead of GitHub's infrastructure.
+
+Cache entries are stored on disk and persist between runs, so subsequent executions benefit from previously saved caches.
+
+<Note>
+If `ACTIONS_CACHE_URL` is already set in your environment before running act, act will not start its own cache server. Your existing value will be used instead.
+</Note>
+
+## Storage and eviction
+
+The cache server stores data in the directory specified by `--cache-server-path`. Within that directory:
+
+- **Cache data** is stored under a `cache/` subdirectory.
+- **Metadata** is tracked in a `bolt.db` BoltDB database file.
+
+The server performs automatic garbage collection using the following retention rules:
+
+| Condition | Retention |
+|---|---|
+| Incomplete uploads | Removed after 5 minutes |
+| Entries unused | Removed after 7 days |
+| All entries (max age) | Removed after 30 days |
+| Duplicate key/version | Only the most recent kept |
+
+## Configuration options
+
+<CardGroup cols={2}>
+  <Card title="--no-cache-server" icon="x">
+    Disable the cache server entirely. `actions/cache` steps will have no effect.
+  </Card>
+  <Card title="--cache-server-path" icon="folder">
+    Directory where cache data is stored on disk. Defaults to `~/.cache/actcache`.
+  </Card>
+  <Card title="--cache-server-addr" icon="network">
+    IP address the cache server binds to. Defaults to the auto-detected outbound IP.
+  </Card>
+  <Card title="--cache-server-port" icon="plug">
+    Port the cache server listens on. Defaults to `0`, which means a randomly available port is assigned at startup.
+  </Card>
+  <Card title="--cache-server-external-url" icon="globe">
+    External URL to use when the cache server is behind a reverse proxy. No trailing slash. For example: `https://act-cache.example.com`.
+  </Card>
+</CardGroup>
+
+## Usage examples
+
+<Tabs>
+  <Tab title="Default (server enabled)">
+    The cache server runs automatically. No extra flags are needed:
+
+    ```bash
+    act
+    ```
+  </Tab>
+  <Tab title="Custom cache directory">
+    Store caches in a specific location:
+
+    ```bash
+    act --cache-server-path /var/cache/act
+    ```
+  </Tab>
+  <Tab title="Disable cache server">
+    Run without the cache server if you don't need caching or want to test cache-miss behavior:
+
+    ```bash
+    act --no-cache-server
+    ```
+  </Tab>
+  <Tab title="Behind a reverse proxy">
+    If your containers cannot reach the cache server at its bind address (for example, when running in a custom Docker network), set the external URL that containers should connect to:
+
+    ```bash
+    act --cache-server-addr 0.0.0.0 \
+        --cache-server-port 8080 \
+        --cache-server-external-url http://host.docker.internal:8080
+    ```
+  </Tab>
+</Tabs>
+
+## Example workflow
+
+The following workflow uses `actions/cache` to cache Node.js dependencies. With act's cache server running, the second run will restore from disk rather than downloading from npm.
+
+```yaml
+name: Node.js CI
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+```
+
+<Tip>
+Cache keys in act work the same way as on GitHub — exact key matches are preferred, and prefix matches are used as fallbacks. Cache entries are case-insensitive.
+</Tip>
+
+<Warning>
+The `clean` endpoint (used for force-deleting cache entries via the GitHub API) is not fully implemented. Cached data can be removed by deleting files from `--cache-server-path` directly.
+</Warning>

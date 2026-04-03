@@ -1,0 +1,157 @@
+---
+title: "Running Workflows"
+description: "How to run GitHub Actions workflows locally with act, including job filtering, dry runs, watch mode, and logging options."
+---
+
+`act` reads your `.github/workflows/` directory and executes jobs inside Docker containers, reproducing the GitHub Actions runtime on your local machine.
+
+## Basic invocation
+
+Run all workflows triggered by the `push` event — the default when no event is specified:
+
+```bash
+act
+```
+
+Run a specific event:
+
+```bash
+act push
+act pull_request
+act workflow_dispatch
+```
+
+If your workflow file only defines a single event, act uses that event automatically without you needing to pass it explicitly.
+
+## Targeting specific jobs
+
+Run a single job by its ID (the key under `jobs:` in the workflow YAML):
+
+```bash
+act -j build
+act -j test
+act -j deploy
+```
+
+## Listing and inspecting workflows
+
+<CardGroup cols={2}>
+  <Card title="List all jobs" icon="list">
+    Print a table of every stage, job ID, job name, workflow file, and trigger events found in `.github/workflows/`:
+
+    ```bash
+    act --list
+    act -l
+    ```
+  </Card>
+  <Card title="Draw the graph" icon="git-branch">
+    Render an ASCII dependency graph of all jobs and their `needs:` relationships:
+
+    ```bash
+    act --graph
+    act -g
+    ```
+  </Card>
+</CardGroup>
+
+The `--list` output columns are: **Stage**, **Job ID**, **Job name**, **Workflow**, **Events**.
+
+## Validation and dry runs
+
+<Tabs>
+  <Tab title="Validate only">
+    Parse and validate workflow files against the GitHub Actions schema without running anything:
+
+    ```bash
+    act --validate
+    ```
+
+    Use `--strict` to apply the strict schema variant, which rejects fields that the schema does not explicitly allow:
+
+    ```bash
+    act --validate --strict
+    ```
+  </Tab>
+  <Tab title="Dry run">
+    Validate workflow logic and log what would run, but skip container creation entirely:
+
+    ```bash
+    act --dryrun
+    act -n
+    ```
+
+    Dry run is useful for quickly verifying that event routing and job dependencies resolve correctly before committing to a full Docker execution.
+  </Tab>
+</Tabs>
+
+## Watch mode
+
+Re-run the selected plan automatically whenever files in the working directory change. Act respects `.gitignore` to filter which paths trigger a re-run, and runs the plan once immediately before entering the watch loop.
+
+```bash
+act --watch
+act -w
+```
+
+<Note>
+Watch mode monitors the current working directory with a 2-second debounce. Changes to files listed in `.gitignore` are ignored.
+</Note>
+
+## Specifying paths
+
+<Steps>
+  <Step title="Change the workflow directory">
+    Point act at a different directory (or a single file) instead of the default `.github/workflows/`:
+
+    ```bash
+    act -W ./path/to/workflows/
+    act -W ./.github/workflows/my-workflow.yml
+    ```
+
+    To prevent act from recursing into subdirectories when a directory is given:
+
+    ```bash
+    act -W ./workflows/ --no-recurse
+    ```
+  </Step>
+  <Step title="Change the working directory">
+    Run act as if it were invoked from a different repository root:
+
+    ```bash
+    act -C /path/to/repo
+    ```
+
+    All relative paths (for workflow files, secret files, env files, etc.) are resolved against the directory specified by `-C`.
+  </Step>
+</Steps>
+
+## Concurrent jobs
+
+By default act runs as many jobs in parallel as there are CPUs available on the host. Override this with `--concurrent-jobs`:
+
+```bash
+act --concurrent-jobs 4
+```
+
+Setting `--concurrent-jobs 1` forces fully serial execution, which is useful for debugging ordering issues.
+
+<Note>
+Within a single stage, act runs all jobs in that stage in parallel up to the concurrency limit. Stages themselves are always executed serially: stage 2 only begins after every job in stage 1 has finished.
+</Note>
+
+## Logging options
+
+| Flag | Short | Effect |
+|---|---|---|
+| `--verbose` | `-v` | Enable debug-level logging, including Docker API calls |
+| `--quiet` | `-q` | Suppress all step output |
+| `--json` | | Emit log lines as JSON objects (useful for log aggregation) |
+| `--log-prefix-job-id` | | Prefix each log line with the short job ID instead of the full job name |
+
+<Tip>
+Combine `--json` with a tool like `jq` to filter or pretty-print act's output:
+
+```bash
+act --json 2>&1 | jq 'select(.level == "error")'
+```
+</Tip>

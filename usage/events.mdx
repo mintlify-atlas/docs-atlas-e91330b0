@@ -1,0 +1,171 @@
+---
+title: "Events and Triggers"
+description: "How to simulate GitHub Actions event triggers with act, including custom event payloads and common event types."
+---
+
+Act uses the GitHub Actions event model. You pass an event name as a positional argument, and act selects all workflows whose `on:` clause includes that event.
+
+## Default event selection
+
+When you run `act` without any arguments, the following logic applies (in order):
+
+1. If only one event type exists across all loaded workflows, that event is used automatically.
+2. If multiple event types exist and `--detect-event` is not set, `push` is used as the default.
+3. If `--detect-event` is set, the first event listed in the first workflow file is used.
+
+```bash
+# uses push (or the sole event if only one exists)
+act
+
+# explicitly trigger push
+act push
+
+# trigger pull_request workflows
+act pull_request
+```
+
+## Auto-detecting the event
+
+The `--detect-event` flag reads the first event from the workflow's `on:` definition and uses it as the trigger, rather than defaulting to `push`. This is useful when your workflows do not listen on `push`:
+
+```bash
+act --detect-event
+```
+
+Events are collected from all loaded workflow files and sorted alphabetically (`pkg/model/planner.go`). `--detect-event` picks the first entry in that sorted list — so if your workflows define `push` and `pull_request`, the first alphabetically is `pull_request`.
+
+## Custom event payloads
+
+GitHub webhooks deliver a JSON payload with every event. You can provide your own payload file to simulate specific event data (repository name, PR number, commit SHA, etc.):
+
+```bash
+act -e /path/to/event.json
+act pull_request -e ./testdata/pr-event.json
+```
+
+The file contents are read into `runner.eventJSON` and mounted as `event.json` inside each job container, exactly as GitHub's runner does.
+
+### Example payloads
+
+<Tabs>
+  <Tab title="push">
+    ```json
+    {
+      "ref": "refs/heads/main",
+      "before": "0000000000000000000000000000000000000000",
+      "after": "abc123def456",
+      "repository": {
+        "full_name": "my-org/my-repo",
+        "default_branch": "main"
+      },
+      "pusher": {
+        "name": "octocat"
+      },
+      "commits": [
+        {
+          "id": "abc123def456",
+          "message": "fix: resolve build error",
+          "author": {
+            "name": "Octocat",
+            "email": "octocat@github.com"
+          }
+        }
+      ]
+    }
+    ```
+  </Tab>
+  <Tab title="pull_request">
+    ```json
+    {
+      "action": "opened",
+      "number": 42,
+      "pull_request": {
+        "number": 42,
+        "title": "Add new feature",
+        "state": "open",
+        "head": {
+          "ref": "feature/my-feature",
+          "sha": "abc123"
+        },
+        "base": {
+          "ref": "main",
+          "sha": "def456"
+        },
+        "user": {
+          "login": "octocat"
+        }
+      },
+      "repository": {
+        "full_name": "my-org/my-repo"
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="workflow_dispatch">
+    ```json
+    {
+      "inputs": {
+        "environment": "staging",
+        "dry-run": "false"
+      },
+      "ref": "refs/heads/main",
+      "repository": {
+        "full_name": "my-org/my-repo"
+      },
+      "sender": {
+        "login": "octocat"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+When you pass `--input key=value` flags without an event file, act automatically constructs an event JSON of the form `{"inputs": {"key": "value"}}` and uses it as the workflow dispatch payload.
+</Tip>
+
+## Common events
+
+| Event | Description |
+|---|---|
+| `push` | A commit is pushed to a branch or tag |
+| `pull_request` | A pull request is opened, updated, or closed |
+| `workflow_dispatch` | A workflow is triggered manually via the GitHub UI or API |
+| `release` | A GitHub release is published, created, or edited |
+| `schedule` | A cron-based scheduled trigger |
+| `repository_dispatch` | A custom webhook payload sent via the GitHub API |
+| `workflow_call` | A reusable workflow called by another workflow |
+
+## Schedule events
+
+<Warning>
+Cron-based `schedule` triggers do not run automatically in act — there is no background scheduler. To run a workflow that uses `schedule`, invoke it explicitly:
+
+```bash
+act schedule
+```
+
+Act executes all jobs whose `on:` clause includes `schedule`. You can supply an event payload with `-e` to simulate a scheduled run with specific `scheduled` timestamp data.
+</Warning>
+
+## Repository dispatch events
+
+`repository_dispatch` workflows require a custom event type defined in your workflow's `types:` filter. To simulate one, trigger the event by name and provide the payload:
+
+```bash
+act repository_dispatch -e ./dispatch-event.json
+```
+
+Example payload:
+
+```json
+{
+  "action": "my-custom-event",
+  "client_payload": {
+    "unit": false,
+    "integration": true
+  }
+}
+```
+
+Your workflow must list `my-custom-event` in `on.repository_dispatch.types` for it to be selected.

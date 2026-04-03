@@ -1,0 +1,121 @@
+---
+title: "Docker Images Reference"
+description: "Available Docker images for act, with size, compatibility, and guidance on choosing the right tier."
+---
+
+act runs workflow jobs inside Docker containers. Because GitHub's hosted runners come pre-loaded with hundreds of tools, act needs an image that approximates that environment — or at least provides enough to run your specific actions.
+
+Images are mapped to runner labels using the `-P` flag:
+
+```bash
+act -P ubuntu-latest=catthehacker/ubuntu:act-latest
+```
+
+You can set multiple mappings at once:
+
+```bash
+act \
+  -P ubuntu-latest=catthehacker/ubuntu:act-latest \
+  -P ubuntu-22.04=catthehacker/ubuntu:act-22.04 \
+  -P ubuntu-20.04=catthehacker/ubuntu:act-20.04
+```
+
+Persistent mappings belong in your [`.actrc` file](/configuration/actrc) so you don't have to repeat them on every run.
+
+---
+
+## Choosing an image tier
+
+act groups images into three tiers. When no platform mapping is configured and no `.actrc` exists, act prompts you to choose a default tier interactively.
+
+| Tier | Approximate size | Best for |
+|---|---|---|
+| **Micro** | &lt;200 MB | Simple Node.js actions only; very fast first pull |
+| **Medium** | ~500 MB | Most workflows; good balance of speed and compatibility |
+| **Large** | ~17 GB | Full GitHub runner parity; required for complex tool-heavy workflows |
+
+<Tip>
+  Start with the Medium tier. Switch to Large only if your workflow uses tools not included in the Medium images, or if you need exact GitHub runner compatibility.
+</Tip>
+
+---
+
+## catthehacker/ubuntu images
+
+These images are based on Ubuntu and are the **recommended** choice for most use cases. They are maintained by the community at [catthehacker/docker-images](https://github.com/catthehacker/docker_images).
+
+### Medium tier (`act-*`) — ~500 MB each
+
+These images include the tools needed to bootstrap most GitHub Actions and are compatible with the majority of workflows. They do not replicate the full set of pre-installed software found on GitHub's runners.
+
+| Image | Ubuntu version | Recommended mapping |
+|---|---|---|
+| `catthehacker/ubuntu:act-latest` | Latest LTS | `-P ubuntu-latest=catthehacker/ubuntu:act-latest` |
+| `catthehacker/ubuntu:act-22.04` | 22.04 (Jammy) | `-P ubuntu-22.04=catthehacker/ubuntu:act-22.04` |
+| `catthehacker/ubuntu:act-20.04` | 20.04 (Focal) | `-P ubuntu-20.04=catthehacker/ubuntu:act-20.04` |
+| `catthehacker/ubuntu:act-18.04` | 18.04 (Bionic) | `-P ubuntu-18.04=catthehacker/ubuntu:act-18.04` |
+
+### Large tier (`full-*`) — ~17 GB each
+
+These images are snapshots of GitHub's hosted runner environments (without snap packages and pre-pulled Docker images). They provide the highest compatibility at the cost of a very large download and significant disk space.
+
+| Image | Ubuntu version | Notes |
+|---|---|---|
+| `catthehacker/ubuntu:full-latest` | Latest LTS | Requires ~75 GB free disk space |
+| `catthehacker/ubuntu:full-22.04` | 22.04 (Jammy) | Requires ~75 GB free disk space |
+| `catthehacker/ubuntu:full-20.04` | 20.04 (Focal) | Requires ~75 GB free disk space |
+| `catthehacker/ubuntu:full-18.04` | 18.04 (Bionic) | Requires ~75 GB free disk space |
+
+<Warning>
+  The size badges in Docker Hub and GitHub Container Registry show the **compressed** image size. After pulling, the image will occupy considerably more disk space due to decompression of image layers.
+</Warning>
+
+---
+
+## node images (micro tier)
+
+These are the official Node.js Docker Hub images. They are very small and fast to pull, but are based on Debian (not Ubuntu) and include only Node.js and its standard toolchain.
+
+| Image | Notes |
+|---|---|
+| `node:16-bullseye` | Debian Bullseye, full Node.js install |
+| `node:16-bullseye-slim` | Debian Bullseye, minimal; **no Python** |
+| `node:16-buster` | Debian Buster, full Node.js install |
+| `node:16-buster-slim` | Debian Buster, minimal; **no Python** |
+
+**Default micro-tier mappings used by act's interactive setup:**
+
+```bash
+-P ubuntu-latest=node:16-buster-slim
+-P ubuntu-22.04=node:16-bullseye-slim
+-P ubuntu-20.04=node:16-buster-slim
+-P ubuntu-18.04=node:16-buster-slim
+```
+
+<Note>
+  **Debian vs Ubuntu differences.** The `node` images use a Debian root filesystem. While Debian and Ubuntu are closely related, package names, default paths, and pre-installed software can differ. Actions or scripts that assume Ubuntu may behave differently.
+
+  **No Python in slim images.** The `-slim` variants do not include Python. If your workflow runs actions or scripts that depend on Python (including many GitHub-provided actions), use the non-slim variants or switch to a `catthehacker/ubuntu` image.
+</Note>
+
+---
+
+## nektos/act-environments-ubuntu (legacy)
+
+These images were built to closely match GitHub's Ubuntu runner environment. They are hosted on Docker Hub.
+
+<Warning>
+  These images were last updated in **February 2020** and are no longer maintained. They are missing several years of tool updates. If you choose to use them, run `docker pull` followed by `docker image update` to apply any available layer updates. The `catthehacker/ubuntu:full-*` images are the recommended modern replacement.
+</Warning>
+
+| Image | Notes |
+|---|---|
+| `nektos/act-environments-ubuntu:18.04` | Ubuntu 18.04, standard environment |
+| `nektos/act-environments-ubuntu:18.04-lite` | Ubuntu 18.04, reduced tool set |
+| `nektos/act-environments-ubuntu:18.04-full` | Ubuntu 18.04, full GitHub runner environment snapshot |
+
+Example mapping:
+
+```bash
+act -P ubuntu-18.04=nektos/act-environments-ubuntu:18.04
+```

@@ -1,0 +1,351 @@
+---
+title: "CLI Flags Reference"
+description: "Complete reference for all act command-line flags, organized by category."
+---
+
+`act` is invoked as:
+
+```bash
+act [event name to run] [flags]
+```
+
+If no event name is passed, act defaults to `push`. If the loaded workflows handle only a single event type, that event is used automatically.
+
+Flags can also be set persistently via the [`.actrc` configuration file](/configuration/actrc). Lines in `.actrc` are prepended to the CLI arguments before processing.
+
+---
+
+## Workflow selection
+
+<ParamField path="--workflows" type="string" default="./.github/workflows/">
+  Path to the workflow file or directory containing workflow files. Equivalent short form: `-W`.
+</ParamField>
+
+<ParamField path="--directory" type="string" default=".">
+  Working directory. act resolves all relative paths (workflow path, secret file, env file, etc.) relative to this directory. Equivalent short form: `-C`.
+</ParamField>
+
+<ParamField path="--no-recurse" type="boolean" default="false">
+  Disable recursive discovery of workflow files in subdirectories of the path specified by `--workflows`. When set, only files directly in the given directory are loaded.
+</ParamField>
+
+---
+
+## Execution control
+
+<ParamField path="--job" type="string" default="">
+  Run only the job with this ID. Equivalent short form: `-j`. If not set, act runs all jobs triggered by the event.
+</ParamField>
+
+<ParamField path="[event name]" type="string (positional)">
+  The GitHub Actions event name to simulate (e.g. `push`, `pull_request`, `workflow_dispatch`). Passed as a positional argument rather than a flag. Defaults to `push` when not specified and multiple events are present.
+</ParamField>
+
+<ParamField path="--detect-event" type="boolean" default="false">
+  Automatically use the first event type declared in the workflow file as the trigger event. Useful when a workflow declares only one event and you do not want to type it on the command line.
+</ParamField>
+
+<ParamField path="--eventpath" type="string" default="">
+  Path to a JSON file containing the event payload to pass to the workflow. The file contents are mounted as `event.json` inside each container. Equivalent short form: `-e`.
+
+  ```bash
+  act pull_request -e ./testdata/pr-event.json
+  ```
+</ParamField>
+
+<ParamField path="--matrix" type="string[]" default="[]">
+  Restrict execution to specific matrix combinations. Can be repeated. Format: `key:value` (e.g. `--matrix java:13`). Only matrix jobs whose configuration includes every specified key-value pair are run.
+</ParamField>
+
+<ParamField path="--concurrent-jobs" type="integer" default="0">
+  Maximum number of jobs to run in parallel. A value of `0` (the default) means act uses the number of available CPUs on the host.
+</ParamField>
+
+<ParamField path="--dryrun" type="boolean" default="false">
+  Validate the workflow plan without creating any containers. Equivalent short form: `-n`.
+</ParamField>
+
+---
+
+## Container configuration
+
+<ParamField path="--platform" type="string[]" default="[]">
+  Map a GitHub-hosted runner label to a Docker image. Can be repeated for multiple platforms. Equivalent short form: `-P`.
+
+  ```bash
+  act -P ubuntu-latest=catthehacker/ubuntu:act-latest \
+      -P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+  ```
+
+  When no platform mapping is set and no `.actrc` exists, act runs an interactive prompt to select a default image tier.
+</ParamField>
+
+<ParamField path="--container-architecture" type="string" default="">
+  CPU architecture for container images, in OCI format (e.g. `linux/amd64`, `linux/arm64`). When not set, the host's default architecture is used. Requires Docker server API version 1.41 or later; ignored on earlier versions.
+
+  <Note>
+    On Apple M-series chips, act warns if this flag is not set and recommends `--container-architecture linux/amd64` for best compatibility.
+  </Note>
+</ParamField>
+
+<ParamField path="--container-daemon-socket" type="string" default="">
+  URI for the Docker Engine socket (e.g. `unix:///var/run/docker.sock`). Pass `-` to disable bind-mounting the socket into containers. When omitted, act auto-detects the socket from `DOCKER_HOST` or common socket locations.
+</ParamField>
+
+<ParamField path="--container-options" type="string" default="">
+  Additional Docker container options passed directly to the job container when the workflow does not set an `options` property. Accepts the same syntax as `docker run` options (e.g. `--container-options "--memory 2g --cpus 1"`).
+</ParamField>
+
+<ParamField path="--network" type="string" default="host">
+  Docker network name to attach containers to. Defaults to the `host` network. Use this to connect containers to a custom Docker network.
+</ParamField>
+
+<ParamField path="--reuse" type="boolean" default="false">
+  Do not remove containers after a workflow completes successfully. This preserves the container state between runs, which can speed up repeated local runs. Equivalent short form: `-r`.
+</ParamField>
+
+<ParamField path="--bind" type="boolean" default="false">
+  Bind-mount the working directory into the container instead of copying it. This is faster for large repositories but means the container can modify your local files. Equivalent short form: `-b`.
+</ParamField>
+
+<ParamField path="--rm" type="boolean" default="false">
+  Automatically remove containers and volumes after a workflow **failure**. By default, failed containers are left in place for inspection. Successful runs always clean up containers unless `--reuse` is set.
+</ParamField>
+
+<ParamField path="--pull" type="boolean" default="true">
+  Pull Docker images even if they already exist locally. Set `--pull=false` to always use the locally cached image. Equivalent short form: `-p`. Automatically disabled when `--action-offline-mode` is active.
+</ParamField>
+
+<ParamField path="--rebuild" type="boolean" default="true">
+  Rebuild local action Docker images even if they already exist. Set `--rebuild=false` to reuse a previously built image.
+</ParamField>
+
+<ParamField path="--use-gitignore" type="boolean" default="true">
+  When copying the working directory into containers, respect `.gitignore` and skip matching files. Set to `false` to copy all files including those excluded by `.gitignore`.
+</ParamField>
+
+---
+
+## Secrets and variables
+
+<ParamField path="--secret" type="string[]" default="[]">
+  Pass a secret into the workflow. Can be repeated. Formats accepted: `-s MY_SECRET=value` or `-s MY_SECRET` (act will prompt for the value). Equivalent short form: `-s`.
+</ParamField>
+
+<ParamField path="--secret-file" type="string" default=".secrets">
+  Path to a file containing secrets, one per line in `KEY=VALUE` format (dotenv syntax). Key names are matched case-insensitively. Loaded in addition to secrets passed via `--secret`.
+</ParamField>
+
+<ParamField path="--var" type="string[]" default="[]">
+  Pass a workflow variable (non-secret). Can be repeated. Format: `--var myvar=foo` or `--var myvar`.
+</ParamField>
+
+<ParamField path="--var-file" type="string" default=".vars">
+  Path to a file containing workflow variables in dotenv format.
+</ParamField>
+
+<ParamField path="--env" type="string[]" default="[]">
+  Set an environment variable in workflow containers. Can be repeated. Format: `--env myenv=foo` or `--env myenv`.
+</ParamField>
+
+<ParamField path="--env-file" type="string" default=".env">
+  Path to a dotenv file (or YAML file with `.yml`/`.yaml` extension) whose contents are loaded as environment variables in the containers.
+</ParamField>
+
+<ParamField path="--input" type="string[]" default="[]">
+  Pass a workflow dispatch input. Can be repeated. Format: `--input myinput=value`.
+</ParamField>
+
+<ParamField path="--input-file" type="string" default=".input">
+  Path to a file containing workflow dispatch inputs in dotenv format.
+</ParamField>
+
+<ParamField path="--insecure-secrets" type="boolean" default="false">
+  Print secret values in plain text in logs instead of masking them.
+
+  <Warning>
+    Never use `--insecure-secrets` in CI/CD pipelines or shared environments. It is intended only for local debugging when you need to verify a secret value is being passed correctly.
+  </Warning>
+</ParamField>
+
+---
+
+## GitHub integration
+
+<ParamField path="--actor" type="string" default="nektos/act">
+  The GitHub username to use as the workflow actor (sets `GITHUB_ACTOR`). Equivalent short form: `-a`.
+</ParamField>
+
+<ParamField path="--defaultbranch" type="string" default="">
+  The name of the repository's default branch (e.g. `main` or `master`). Used to set `event.repository.default_branch` in the event payload and to derive `GITHUB_REF` when no git ref can be determined from the working directory.
+</ParamField>
+
+<ParamField path="--remote-name" type="string" default="origin">
+  The git remote name used to retrieve the repository URL. act reads the remote URL to populate `GITHUB_REPOSITORY` and similar context fields.
+</ParamField>
+
+<ParamField path="--github-instance" type="string" default="github.com">
+  GitHub instance hostname. Change this only when targeting a GitHub Enterprise Server instance (e.g. `--github-instance github.mycompany.com`).
+</ParamField>
+
+<ParamField path="--replace-ghe-action-with-github-com" type="string[]" default="[]">
+  When using GitHub Enterprise Server, redirect specific action references to fetch from github.com instead. Specify the action slug (e.g. `--replace-ghe-action-with-github-com github/super-linter`).
+</ParamField>
+
+<ParamField path="--replace-ghe-action-token-with-github-com" type="string" default="">
+  Personal access token used to authenticate requests to github.com when fetching actions redirected by `--replace-ghe-action-with-github-com`. Required when the actions are in private repositories.
+</ParamField>
+
+---
+
+## Artifact server
+
+act includes a built-in artifact server that handles `actions/upload-artifact` and `actions/download-artifact`. The server only starts when `--artifact-server-path` is set.
+
+<ParamField path="--artifact-server-path" type="string" default="">
+  Directory where the artifact server stores uploaded artifacts and serves downloads from. The artifact server does **not** start unless this flag is set.
+</ParamField>
+
+<ParamField path="--artifact-server-addr" type="string" default="(host outbound IP)">
+  Address the artifact server binds to. Defaults to the host's outbound IP address.
+</ParamField>
+
+<ParamField path="--artifact-server-port" type="string" default="34567">
+  Port the artifact server listens on.
+</ParamField>
+
+---
+
+## Cache server
+
+act includes a built-in cache server compatible with `actions/cache`. It starts automatically unless disabled or `ACTIONS_CACHE_URL` is already set in the environment.
+
+<ParamField path="--no-cache-server" type="boolean" default="false">
+  Disable the built-in cache server entirely.
+</ParamField>
+
+<ParamField path="--cache-server-path" type="string" default="$XDG_CACHE_HOME/actcache">
+  Directory where the cache server stores cache entries.
+</ParamField>
+
+<ParamField path="--cache-server-addr" type="string" default="(host outbound IP)">
+  Address the cache server binds to. Defaults to the host's outbound IP address.
+</ParamField>
+
+<ParamField path="--cache-server-port" type="integer" default="0">
+  Port the cache server listens on. A value of `0` selects a random available port.
+</ParamField>
+
+<ParamField path="--cache-server-external-url" type="string" default="">
+  External URL used by containers to reach the cache server when it is behind a reverse proxy (e.g. `https://act-cache.example.com`). Do not include a trailing slash.
+</ParamField>
+
+---
+
+## Action cache
+
+<ParamField path="--action-cache-path" type="string" default="$XDG_CACHE_HOME/act">
+  Directory where remote actions are cloned and cached, and where host workspaces are created.
+</ParamField>
+
+<ParamField path="--action-offline-mode" type="boolean" default="false">
+  Skip fetching and pulling actions that are already present in the action cache. Implicitly disables `--pull`. Useful for working without an internet connection after an initial run.
+</ParamField>
+
+<ParamField path="--use-new-action-cache" type="boolean" default="false">
+  Enable the experimental go-git-based action cache for storing and resolving actions locally.
+</ParamField>
+
+<ParamField path="--local-repository" type="string[]" default="[]">
+  Replace a remote action reference with a local directory path. Can be repeated. Formats accepted:
+
+  ```bash
+  # Full URL with ref
+  --local-repository https://github.com/owner/repo@v1=/local/path
+
+  # Short form (matches any host or protocol)
+  --local-repository owner/repo@v1=/local/path
+  ```
+</ParamField>
+
+---
+
+## Output and logging
+
+<ParamField path="--verbose" type="boolean" default="false">
+  Enable verbose (debug-level) log output. Equivalent short form: `-v`.
+</ParamField>
+
+<ParamField path="--quiet" type="boolean" default="false">
+  Suppress all output from workflow steps. Only act's own log messages are shown. Equivalent short form: `-q`.
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Format log output as JSON (logrus JSON format). Useful for machine parsing or structured log ingestion.
+</ParamField>
+
+<ParamField path="--log-prefix-job-id" type="boolean" default="false">
+  Prefix log lines with the job ID instead of the full job name in non-JSON log output.
+</ParamField>
+
+---
+
+## Utilities
+
+<ParamField path="--list" type="boolean" default="false">
+  List all jobs from the loaded workflows and exit. Equivalent short form: `-l`. Combine with `--job` or a positional event argument to filter the list.
+</ParamField>
+
+<ParamField path="--graph" type="boolean" default="false">
+  Print an ASCII representation of the job dependency graph and exit. Equivalent short form: `-g`.
+</ParamField>
+
+<ParamField path="--watch" type="boolean" default="false">
+  Watch the working directory for file changes and re-run the workflow automatically. Respects `.gitignore`. Equivalent short form: `-w`.
+</ParamField>
+
+<ParamField path="--validate" type="boolean" default="false">
+  Parse and validate all workflow files without running them.
+</ParamField>
+
+<ParamField path="--strict" type="boolean" default="false">
+  Enable strict workflow schema validation. Rejects workflows that use fields not defined in the strict schema.
+</ParamField>
+
+<ParamField path="--no-skip-checkout" type="boolean" default="false">
+  Use `actions/checkout` to check out the repository inside the container instead of copying local files directly. This matches what GitHub's runners do but is slower.
+</ParamField>
+
+<ParamField path="--bug-report" type="boolean" default="false">
+  Print system information useful for filing a bug report: act version, OS, CPU count, Docker host, discovered socket paths, active config files, build info, and Docker engine details. See [troubleshooting](/reference/troubleshooting) for details.
+</ParamField>
+
+<ParamField path="--man-page" type="boolean" default="false">
+  Print a generated man page for act to stdout.
+</ParamField>
+
+<ParamField path="--list-options" type="boolean" default="false">
+  Print a JSON array describing all available CLI flags, their types, defaults, and descriptions — suitable for machine consumption or building wrappers around act.
+</ParamField>
+
+---
+
+## Deprecated flags
+
+The following flags are deprecated and emit a warning when used. Migrate to `--container-options` instead.
+
+<ParamField path="--privileged" type="boolean" default="false">
+  Run job containers in Docker privileged mode. **Deprecated** — use `--container-options "--privileged"` instead.
+</ParamField>
+
+<ParamField path="--userns" type="string" default="">
+  Set the user namespace mode for job containers. **Deprecated** — use `--container-options "--userns=<mode>"` instead.
+</ParamField>
+
+<ParamField path="--container-cap-add" type="string[]" default="[]">
+  Add a Linux kernel capability to job containers. **Deprecated** — use `--container-options "--cap-add <cap>"` instead.
+</ParamField>
+
+<ParamField path="--container-cap-drop" type="string[]" default="[]">
+  Remove a Linux kernel capability from job containers. **Deprecated** — use `--container-options "--cap-drop <cap>"` instead.
+</ParamField>

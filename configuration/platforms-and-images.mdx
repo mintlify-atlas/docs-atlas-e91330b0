@@ -1,0 +1,138 @@
+---
+title: "Platforms and Docker Images"
+description: "Map GitHub runner labels to Docker images so act knows which container to use for each job."
+---
+
+GitHub Actions workflows declare a runner using `runs-on`, for example `runs-on: ubuntu-latest`. act uses the `-P` / `--platform` flag to map these runner labels to actual Docker images on your machine.
+
+## Syntax
+
+```bash
+act -P <runner-label>=<docker-image>
+```
+
+Multiple `-P` flags can be passed at once, or added to [`.actrc`](/configuration/actrc) so they apply on every run.
+
+```bash
+act -P ubuntu-latest=catthehacker/ubuntu:act-latest \
+    -P ubuntu-22.04=catthehacker/ubuntu:act-22.04 \
+    -P ubuntu-20.04=catthehacker/ubuntu:act-20.04
+```
+
+The runner label is case-insensitive. The Docker image can be any image accessible to your local Docker daemon, including images from Docker Hub, GitHub Container Registry, or a private registry.
+
+## Built-in defaults
+
+If no `-P` flag is provided, act falls back to these built-in defaults:
+
+| Runner label | Default image |
+|---|---|
+| `ubuntu-latest` | `node:16-buster-slim` |
+| `ubuntu-22.04` | `node:16-bullseye-slim` |
+| `ubuntu-20.04` | `node:16-buster-slim` |
+| `ubuntu-18.04` | `node:16-buster-slim` |
+
+These micro-tier defaults are intentionally minimal. Most workflows require a larger image. On first run, act prompts you to choose an image tier and writes the result to `~/.config/act/actrc`.
+
+## Image tiers
+
+act's documentation organizes available images into three tiers by size and compatibility:
+
+<CardGroup cols={2}>
+  <Card title="Large (~17 GB)" icon="hard-drive">
+    `catthehacker/ubuntu:full-*` — Snapshots of GitHub's hosted runner environments. Includes snap, pre-pulled Docker images, and most pre-installed tools. Closest to the real GitHub runner experience but requires ~75 GB of free disk space.
+  </Card>
+  <Card title="Medium (~500 MB)" icon="circle-check">
+    `catthehacker/ubuntu:act-*` — The recommended tier. Includes common tools needed to bootstrap actions: Node.js, Python, git, curl, and more. Works with the majority of GitHub Actions workflows.
+  </Card>
+  <Card title="Micro (&lt;200 MB)" icon="bolt">
+    `node:16-buster-slim` / `node:16-bullseye-slim` — Contains only Node.js. Suitable for simple workflows that only need JavaScript actions. Does not work with shell steps that rely on system tools.
+  </Card>
+  <Card title="Custom" icon="box">
+    Any Docker image can be used. If your workflow requires a specific toolchain, point act at an image that has it pre-installed.
+  </Card>
+</CardGroup>
+
+## catthehacker/ubuntu images
+
+The `catthehacker/ubuntu` images are maintained by the community and hosted on GitHub Container Registry (`ghcr.io`). They are based on an Ubuntu root filesystem and are the recommended choice for most act users.
+
+### Act-tier images (medium)
+
+| Image | Runner label |
+|---|---|
+| `catthehacker/ubuntu:act-latest` | `ubuntu-latest` |
+| `catthehacker/ubuntu:act-22.04` | `ubuntu-22.04` |
+| `catthehacker/ubuntu:act-20.04` | `ubuntu-20.04` |
+| `catthehacker/ubuntu:act-18.04` | `ubuntu-18.04` |
+
+Example `.actrc` for the medium tier:
+
+```text
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+-P ubuntu-20.04=catthehacker/ubuntu:act-20.04
+-P ubuntu-18.04=catthehacker/ubuntu:act-18.04
+```
+
+### Full-tier images (large)
+
+| Image | Runner label |
+|---|---|
+| `catthehacker/ubuntu:full-latest` | `ubuntu-latest` |
+| `catthehacker/ubuntu:full-22.04` | `ubuntu-22.04` |
+| `catthehacker/ubuntu:full-20.04` | `ubuntu-20.04` |
+| `catthehacker/ubuntu:full-18.04` | `ubuntu-18.04` |
+
+<Warning>
+  Full-tier images are approximately 17 GB compressed. Pulling them requires significant bandwidth and around 75 GB of free disk space once uncompressed. Use these only when your workflow depends on tools or pre-built Docker images that aren't available in the medium tier.
+</Warning>
+
+## node images (micro tier)
+
+The `node` images from Docker Hub are based on Debian and contain only Node.js. They are the smallest option and are used by act's built-in defaults.
+
+| Image | Notes |
+|---|---|
+| `node:16-bullseye-slim` | Debian Bullseye, slim variant |
+| `node:16-buster-slim` | Debian Buster, slim variant |
+| `node:16-bullseye` | Debian Bullseye, full buildpack-deps base |
+| `node:16-buster` | Debian Buster, full buildpack-deps base |
+
+<Note>
+  The `-slim` variants do not include Python. If your workflow uses actions or scripts that depend on Python, use a medium-tier image or specify a different image manually.
+</Note>
+
+<Note>
+  `node` images are Debian-based, not Ubuntu. While they are very similar, there can be subtle differences in available packages and paths compared to GitHub's actual Ubuntu runners.
+</Note>
+
+## nektos/act-environments images (legacy)
+
+The `nektos/act-environments-ubuntu` images were the original large-tier images for act. They have not been updated since February 2020 and are considered legacy. If you use them, run `docker pull` followed by a manual update inside the container to get current package versions.
+
+| Image | Variant |
+|---|---|
+| `nektos/act-environments-ubuntu:18.04` | Standard |
+| `nektos/act-environments-ubuntu:18.04-lite` | Lite variant |
+| `nektos/act-environments-ubuntu:18.04-full` | Full variant |
+
+The `catthehacker/ubuntu:full-*` images are the actively maintained replacement for this tier.
+
+## Using a custom image
+
+You can use any Docker image, including images from private registries or images you build yourself:
+
+```bash
+# Use a custom internal image
+act -P ubuntu-latest=myregistry.example.com/my-runner:latest
+
+# Use a language-specific image for a workflow that only needs Python
+act -P ubuntu-latest=python:3.11-slim
+
+# Mix tiers for different runner labels
+act -P ubuntu-latest=catthehacker/ubuntu:act-latest \
+    -P ubuntu-18.04=catthehacker/ubuntu:full-18.04
+```
+
+The image must have a shell (`/bin/sh` or `bash`) and any tools your workflow steps require. act copies your repository into the container and executes steps inside it.

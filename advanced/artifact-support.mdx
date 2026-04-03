@@ -1,0 +1,117 @@
+---
+title: "Artifact Support"
+description: "Run workflows that upload and download artifacts locally using act's built-in artifact server."
+---
+
+act includes a built-in artifact server that emulates GitHub's artifact upload and download API. When enabled, steps using `actions/upload-artifact` and `actions/download-artifact` work exactly as they would on GitHub, storing files on your local disk instead of GitHub's infrastructure.
+
+## How it works
+
+The artifact server is **disabled by default**. To enable it, pass `--artifact-server-path` with a directory where artifacts should be stored. When this flag is set, act starts a local HTTP server before workflow execution begins and shuts it down when the run completes.
+
+The server implements the same `/_apis/pipelines/workflows/:runId/artifacts` endpoints that GitHub Actions uses, so existing upload and download steps require no modification.
+
+```bash
+act --artifact-server-path /tmp/act-artifacts
+```
+
+<Note>
+Without `--artifact-server-path`, any step that uses `actions/upload-artifact` or `actions/download-artifact` will fail or be silently skipped, depending on the action version.
+</Note>
+
+## Storage layout
+
+Artifacts are written to the directory specified by `--artifact-server-path`, organized by run ID and artifact name:
+
+```
+/tmp/act-artifacts/
+└── <runId>/
+    └── <artifactName>/
+        └── <files...>
+```
+
+Files uploaded with gzip compression are stored with a `.gz__` suffix and served back with the correct `Content-Encoding` header.
+
+## Configuration options
+
+<CardGroup cols={2}>
+  <Card title="--artifact-server-path" icon="folder">
+    Path on disk where uploaded artifacts are stored and downloaded from. Setting this flag enables the artifact server. Required to use artifact steps.
+  </Card>
+  <Card title="--artifact-server-addr" icon="network">
+    IP address the artifact server binds to. Defaults to the host's auto-detected outbound IP address.
+  </Card>
+  <Card title="--artifact-server-port" icon="plug">
+    Port the artifact server listens on. Defaults to `34567`.
+  </Card>
+</CardGroup>
+
+## Usage examples
+
+<Tabs>
+  <Tab title="Basic">
+    Enable artifact support with a temporary directory:
+
+    ```bash
+    act --artifact-server-path /tmp/act-artifacts
+    ```
+  </Tab>
+  <Tab title="Custom address and port">
+    Bind to a specific address and port if the defaults conflict with another service:
+
+    ```bash
+    act --artifact-server-path /tmp/act-artifacts \
+        --artifact-server-addr 127.0.0.1 \
+        --artifact-server-port 9090
+    ```
+  </Tab>
+  <Tab title=".actrc">
+    Persist artifact server settings in your `.actrc` file so you don't need to pass them on every invocation:
+
+    ```
+    --artifact-server-path /tmp/act-artifacts
+    --artifact-server-port 34567
+    ```
+  </Tab>
+</Tabs>
+
+## Example workflow
+
+The following workflow uploads a build artifact and then downloads it in a later step. Both steps work without modification when run with act, provided `--artifact-server-path` is set.
+
+```yaml
+name: Build and archive
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: make build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-build
+          path: dist/
+
+  verify:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: my-build
+          path: dist/
+
+      - name: Verify
+        run: ls -la dist/
+```
+
+<Tip>
+The artifact directory persists between runs. This is useful for inspecting what was uploaded. Clean the directory manually between runs if you want a fresh state.
+</Tip>

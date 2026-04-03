@@ -1,97 +1,72 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "act — Run GitHub Actions Locally"
+description: "Run your GitHub Actions locally using Docker. Get fast feedback on your workflows without committing and pushing every change."
 ---
 
-## Setting up
+`act` reads your `.github/workflows/` files and runs your GitHub Actions locally using Docker — giving you the same environment variables, filesystem structure, and execution model that GitHub provides on its hosted runners.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install act on macOS, Linux, Windows, or build from source
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Run your first workflow locally in under 5 minutes
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="CLI Reference" icon="terminal" href="/reference/cli-flags">
+    Complete reference for all flags and options
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Configuration" icon="gear" href="/configuration/actrc">
+    Configure act with .actrc for persistent settings
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Why use act?
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Fast feedback" icon="bolt">
+    Test workflow changes instantly without a commit/push cycle. Iterate on your `.github/workflows/` files locally.
+  </Card>
+  <Card title="Local task runner" icon="play">
+    Use GitHub Actions as a replacement for Makefiles. Run any defined job on demand from your terminal.
+  </Card>
+  <Card title="Secrets and variables" icon="key">
+    Pass secrets, environment variables, and inputs directly from the command line or local files.
+  </Card>
+  <Card title="Artifact and cache support" icon="box-archive">
+    Built-in servers emulate GitHub's artifact upload/download and Actions cache APIs.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## How it works
 
-## Need inspiration?
+<Steps>
+  <Step title="act reads your workflows">
+    act parses `.github/workflows/` and determines which jobs to run based on the event you specify.
+  </Step>
+  <Step title="Docker images are prepared">
+    act pulls or builds the Docker images defined in your workflow files — matching GitHub's runner environments.
+  </Step>
+  <Step title="Jobs execute in containers">
+    Each job runs in its own Docker container with the correct environment variables, secrets, and filesystem layout.
+  </Step>
+  <Step title="Results are streamed to your terminal">
+    Step output is streamed in real time, with color-coded job names and log levels.
+  </Step>
+</Steps>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+## Get started
+
+```bash
+# Install act (macOS)
+brew install act
+
+# Run the default push event
+act
+
+# List available workflows and jobs
+act --list
+```
+
+<Note>
+  act requires Docker to be installed and running. See the [installation guide](/installation) for platform-specific instructions and Docker setup.
+</Note>

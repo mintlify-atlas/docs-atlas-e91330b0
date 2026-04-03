@@ -1,0 +1,119 @@
+---
+title: "Installation"
+description: "Install act on macOS, Linux, or Windows using a package manager, install script, or by building from source."
+---
+
+## Prerequisites
+
+act requires Docker to be installed and running on your machine. Docker is used to pull and run the container images that back each workflow job.
+
+<Warning>
+  Start Docker before running `act`. If Docker is not running, act will fail when it tries to connect to the Docker daemon.
+</Warning>
+
+## Install act
+
+<Tabs>
+  <Tab title="macOS">
+    Install with [Homebrew](https://brew.sh):
+
+    ```bash
+    brew install act
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Choose any of the following Windows package managers:
+
+    **Chocolatey**
+
+    ```powershell
+    choco install act-cli
+    ```
+
+    **WinGet**
+
+    ```powershell
+    winget install nektos.act
+    ```
+
+    **Scoop**
+
+    ```powershell
+    scoop install act
+    ```
+  </Tab>
+  <Tab title="Linux">
+    **Homebrew** (macOS and Linux)
+
+    ```bash
+    brew install act
+    ```
+
+    **AUR** (Arch Linux)
+
+    ```bash
+    yay -S act
+    ```
+
+    **Nix**
+
+    ```bash
+    nix run nixpkgs#act
+    ```
+
+    **Install script**
+
+    The install script downloads the correct binary for your platform from GitHub Releases, verifies the SHA-256 checksum, and places the binary in `./bin` by default. Pass `-b /usr/local/bin` to install system-wide.
+
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+    ```
+
+    <Note>
+      The install script requires either `curl` or `wget`. It supports Linux on `amd64`, `arm64`, `armv6`, and `armv7`.
+    </Note>
+  </Tab>
+  <Tab title="Go / Source">
+    **Go install**
+
+    If you have Go 1.24+ installed, you can install act directly:
+
+    ```bash
+    go install github.com/nektos/act@latest
+    ```
+
+    **Build from source**
+
+    ```bash
+    git clone https://github.com/nektos/act.git
+    cd act
+    make build
+    ```
+
+    The compiled binary is written to `dist/local/act`. You can also run `make install` to install it to your `$GOPATH/bin`.
+
+    <Note>
+      Building from source requires Go 1.24 or later. See [go.dev/doc/install](https://go.dev/doc/install) for installation instructions.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Verify the installation
+
+Run the following command to confirm act is installed and check the version:
+
+```bash
+act --version
+```
+
+You should see output like:
+
+```
+act version 0.2.x
+```
+
+## Next step
+
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Run your first workflow locally
+</Card>

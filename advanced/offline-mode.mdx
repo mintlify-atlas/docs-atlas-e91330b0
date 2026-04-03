@@ -1,0 +1,131 @@
+---
+title: "Offline Mode and Local Action Cache"
+description: "Cache actions locally and run act without a network connection using offline mode and local repository substitution."
+---
+
+act can operate without a network connection once action dependencies have been fetched and cached locally. This is useful in air-gapped environments, for faster iteration when working on action-heavy workflows, and for testing local forks of actions without publishing them.
+
+## Action caching
+
+By default, act fetches actions from their remote repositories each time a workflow runs. The `--action-cache-path` flag controls where act stores these cached action repositories on disk.
+
+```bash
+# Default cache location: ~/.cache/act
+act --action-cache-path /var/cache/act
+```
+
+act supports two caching implementations:
+
+<Tabs>
+  <Tab title="Default (go-git)">
+    The default implementation uses [go-git](https://github.com/go-git/go-git) to clone and store action repositories as bare Git repositories under `--action-cache-path`.
+
+    No additional flags are required to use this implementation.
+
+    ```bash
+    act
+    ```
+  </Tab>
+  <Tab title="New action cache (--use-new-action-cache)">
+    The new action cache is also go-git-based and is required when using `--local-repository` or `--action-offline-mode`. Enable it with:
+
+    ```bash
+    act --use-new-action-cache
+    ```
+
+    Each cached action is stored as a bare `.git` directory named after the action's URL (sanitized for filesystem use). The cache directory structure looks like:
+
+    ```
+    ~/.cache/act/
+    └── https---github.com-actions-checkout.git/
+    └── https---github.com-actions-setup-node.git/
+    ```
+  </Tab>
+</Tabs>
+
+## Offline mode
+
+The `--action-offline-mode` flag tells act to skip fetching or pulling action repositories if the content already exists in the local cache. When offline mode is active, act also disables force-pull for Docker images.
+
+```bash
+act --action-offline-mode
+```
+
+<Steps>
+  <Step title="Run once with network access">
+    Execute your workflow normally to populate the action cache:
+
+    ```bash
+    act
+    ```
+  </Step>
+  <Step title="Disconnect from the network">
+    Or work in an air-gapped environment where no network access is available.
+  </Step>
+  <Step title="Run with offline mode">
+    Subsequent runs will use the cached action content without making network requests:
+
+    ```bash
+    act --action-offline-mode
+    ```
+  </Step>
+</Steps>
+
+<Note>
+`--action-offline-mode` activates `--use-new-action-cache` automatically. The offline implementation (`GoGitActionCacheOfflineMode`) wraps the standard cache: it attempts a fetch first, and if the fetch fails due to no network access, it falls back to a previously stored reference (`refs/action-cache-offline/<ref>`) in the local cache.
+</Note>
+
+## Local repository substitution
+
+The `--local-repository` flag replaces a remote action reference with a local directory. This lets you test a fork of an action or a work-in-progress without pushing to a remote repository.
+
+```bash
+# Replace a specific action at a specific ref
+act --local-repository actions/checkout@v4=/home/user/my-checkout-fork
+
+# Replace any ref for the action (matches any host or protocol)
+act --local-repository actions/checkout=/home/user/my-checkout-fork
+```
+
+The flag accepts entries in the format `<owner>/<repo>[@<ref>]=<local-path>`:
+
+- **With a ref** (`actions/checkout@v4`): matches only that exact ref.
+- **Without a ref** (`actions/checkout`): matches the repository at any ref and from any host or protocol.
+
+Pass `--local-repository` multiple times to substitute multiple actions simultaneously:
+
+```bash
+act \
+  --local-repository actions/checkout@v4=/home/user/my-checkout \
+  --local-repository actions/setup-node@v4=/home/user/my-setup-node
+```
+
+<Note>
+`--local-repository` automatically enables the new action cache (`--use-new-action-cache`). Any action reference that does not match a local substitution is fetched normally from the remote.
+</Note>
+
+## Configuration reference
+
+| Flag | Description |
+|---|---|
+| `--action-cache-path` | Directory where action repositories are cached. Default: `~/.cache/act`. |
+| `--use-new-action-cache` | Enable the new GoGit-based action cache. Required for offline mode and local repository substitution. |
+| `--action-offline-mode` | Skip network fetches for actions already present in the local cache. Disables force-pull. |
+| `--local-repository` | Replace a remote action reference with a local directory. Repeatable. |
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="Air-gapped environments" icon="shield">
+    Pre-populate the action cache on a machine with network access, then copy it to the air-gapped machine and run with `--action-offline-mode`.
+  </Card>
+  <Card title="Testing action forks" icon="code-fork">
+    Use `--local-repository` to point a workflow at a local directory instead of a published action, enabling fast iteration without pushing changes.
+  </Card>
+  <Card title="Faster CI loops" icon="bolt">
+    Enable offline mode after the first run to skip redundant network fetches when repeatedly running the same workflow.
+  </Card>
+  <Card title="Reproducible runs" icon="lock">
+    Pin actions to local copies to ensure every run uses exactly the same action code, regardless of upstream changes.
+  </Card>
+</CardGroup>

@@ -1,0 +1,98 @@
+---
+title: "GitHub Enterprise Server"
+description: "Run workflows against a GitHub Enterprise Server instance using act."
+---
+
+act supports GitHub Enterprise Server (GHES) instances. You can point act at your GHES host, pass a GHES-scoped token, and optionally allow specific actions from GitHub.com when they are not available on your instance.
+
+## Setting the GHES host
+
+Use `--github-instance` to specify your GHES hostname. The default is `github.com`.
+
+```bash
+act --github-instance github.example.com
+```
+
+act will use this hostname when constructing API URLs and when resolving action references.
+
+## Passing a GHES token
+
+Provide your GHES personal access token using the `-s GITHUB_TOKEN` flag or by adding it to your `.secrets` file:
+
+<Tabs>
+  <Tab title="CLI flag">
+    ```bash
+    act --github-instance github.example.com \
+        -s GITHUB_TOKEN=ghp_xxxxx
+    ```
+  </Tab>
+  <Tab title=".secrets file">
+    Add to `.secrets` in your project directory:
+
+    ```
+    GITHUB_TOKEN=ghp_xxxxx
+    ```
+
+    Then run:
+
+    ```bash
+    act --github-instance github.example.com
+    ```
+  </Tab>
+</Tabs>
+
+## Allowing GitHub.com actions
+
+When your GHES instance does not mirror actions from GitHub.com, steps that reference actions like `actions/checkout` will fail. Use `--replace-ghe-action-with-github-com` to selectively allow specific actions to be fetched from GitHub.com instead:
+
+```bash
+act --github-instance github.example.com \
+    --replace-ghe-action-with-github-com actions/checkout \
+    --replace-ghe-action-with-github-com actions/setup-node
+```
+
+You can pass `--replace-ghe-action-with-github-com` multiple times to allow multiple actions. Each value should be the action's `owner/repo` path.
+
+### Using a GitHub.com token for private actions
+
+If the allowed GitHub.com actions are in private repositories, provide a GitHub.com personal access token with `--replace-ghe-action-token-with-github-com`:
+
+```bash
+act --github-instance github.example.com \
+    --replace-ghe-action-with-github-com myorg/private-action \
+    --replace-ghe-action-token-with-github-com ghp_github_com_token
+```
+
+<Warning>
+`--replace-ghe-action-token-with-github-com` sets a single token used for all GitHub.com action fetches. If you allow actions from multiple private repositories, they must all be accessible with the same token.
+</Warning>
+
+## Full example
+
+A complete act invocation for a GHES environment with a mix of GHES and GitHub.com actions:
+
+```bash
+act --github-instance github.example.com \
+    -s GITHUB_TOKEN=ghp_xxxxx \
+    --replace-ghe-action-with-github-com actions/checkout \
+    --replace-ghe-action-with-github-com actions/setup-node
+```
+
+## Configuration reference
+
+| Flag | Description |
+|---|---|
+| `--github-instance` | GHES hostname to connect to. Default: `github.com`. |
+| `-s GITHUB_TOKEN` | Token for authenticating with the GHES instance. |
+| `--replace-ghe-action-with-github-com` | Allow a specific action (by `owner/repo`) to be fetched from GitHub.com. Repeatable. |
+| `--replace-ghe-action-token-with-github-com` | GitHub.com PAT used to fetch private actions from GitHub.com. |
+
+<Tip>
+You can persist GHES settings in `.actrc` to avoid repeating them on every invocation:
+
+```
+--github-instance github.example.com
+--replace-ghe-action-with-github-com actions/checkout
+--replace-ghe-action-with-github-com actions/setup-node
+```
+</Tip>

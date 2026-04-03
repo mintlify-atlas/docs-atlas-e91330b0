@@ -1,0 +1,185 @@
+---
+title: "Container Options"
+description: "Control how act creates and manages Docker containers for your workflow jobs."
+---
+
+act exposes a set of flags that control how Docker containers are created, configured, and cleaned up during a workflow run. These flags can be passed on the command line or persisted in [`.actrc`](/configuration/actrc).
+
+## Docker daemon socket
+
+**Flag:** `--container-daemon-socket <uri>`
+
+Specifies the URI of the Docker daemon that act connects to. act auto-detects the socket location if this flag is omitted.
+
+```bash
+# Unix socket (default on Linux and macOS)
+act --container-daemon-socket unix:///var/run/docker.sock
+
+# TCP socket (for remote Docker hosts)
+act --container-daemon-socket tcp://192.168.1.100:2376
+
+# Pass a dash to disable bind-mounting the socket into containers
+act --container-daemon-socket -
+```
+
+act searches the following locations in order when auto-detecting the socket:
+
+| Location | Platform |
+|---|---|
+| `/var/run/docker.sock` | Linux (Docker) |
+| `/run/podman/podman.sock` | Linux (Podman) |
+| `$HOME/.colima/docker.sock` | macOS (Colima) |
+| `$XDG_RUNTIME_DIR/docker.sock` | Linux (XDG) |
+| `$XDG_RUNTIME_DIR/podman/podman.sock` | Linux (Podman, XDG) |
+| `$HOME/.docker/run/docker.sock` | macOS (Docker Desktop) |
+| `\\.\pipe\docker_engine` | Windows |
+
+The `DOCKER_HOST` environment variable takes priority over all of the above. If `DOCKER_HOST` is set, act uses it directly.
+
+## Container architecture
+
+**Flag:** `--container-architecture <platform>`
+
+Forces containers to run with a specific CPU architecture. The value is passed directly to Docker's platform option and must follow the `os/arch` format.
+
+```bash
+act --container-architecture linux/amd64
+act --container-architecture linux/arm64
+```
+
+This flag is particularly useful on Apple Silicon (M-series) Macs, where the host architecture is `arm64` but many GitHub Actions are built for `x86_64`. Running `linux/amd64` images under emulation (via Rosetta or QEMU) is slower but produces more accurate results.
+
+<Warning>
+  If you are on an Apple M-series chip and do not specify `--container-architecture`, act will warn you:
+
+  ```
+  ⚠ You are using Apple M-series chip and you have not specified container architecture,
+    you might encounter issues while running act. If so, try running it with
+    '--container-architecture linux/amd64'. ⚠
+  ```
+
+  This warning appears because many actions assume an `x86_64` environment. Add `--container-architecture linux/amd64` to your `.actrc` to suppress it and improve compatibility.
+</Warning>
+
+Requires Docker server API version 1.41 or later. The flag is silently ignored on older Docker servers.
+
+## Arbitrary container options
+
+**Flag:** `--container-options "<docker run options>"`
+
+Passes arbitrary options to the underlying `docker run` command. This is the recommended way to configure container behaviour that act doesn't expose directly as a dedicated flag.
+
+```bash
+# Run containers in privileged mode
+act --container-options "--privileged"
+
+# Add a Linux kernel capability
+act --container-options "--cap-add SYS_PTRACE"
+
+# Set a custom hostname inside the container
+act --container-options "--hostname my-runner"
+
+# Combine multiple options in a single string
+act --container-options "--privileged --cap-add SYS_PTRACE"
+```
+
+In `.actrc`:
+
+```text
+--container-options --privileged
+```
+
+<Note>
+  The `--privileged`, `--userns`, `--container-cap-add`, and `--container-cap-drop` flags are deprecated. They still work but emit a warning on each run. Migrate to `--container-options` instead.
+</Note>
+
+## Container lifecycle
+
+### Reuse containers between runs
+
+**Flag:** `--reuse` / `-r` (default: `false`)
+
+By default, act removes containers after a workflow completes successfully. Pass `--reuse` to keep containers running between act invocations. This preserves filesystem state across runs, which can speed up iterative development on slow steps.
+
+```bash
+act --reuse
+act -r
+```
+
+<Warning>
+  Reused containers accumulate state. If your workflow writes files or modifies system packages, earlier runs will affect later ones. Remove containers manually with `docker rm` when you want a clean slate.
+</Warning>
+
+### Auto-remove on failure
+
+**Flag:** `--rm` (default: `false`)
+
+When a workflow fails, act leaves the container running by default so you can inspect its state. Pass `--rm` to automatically remove containers and volumes even on failure.
+
+```bash
+act --rm
+```
+
+## Working directory
+
+### Bind mount instead of copy
+
+**Flag:** `--bind` / `-b` (default: `false`)
+
+By default, act copies your working directory into the container using a tar archive. Pass `--bind` to bind-mount the working directory directly instead.
+
+```bash
+act --bind
+act -b
+```
+
+Bind mounting is faster than copying for large repositories, but any files written by the container will appear directly in your working directory.
+
+### Respect .gitignore
+
+**Flag:** `--use-gitignore` (default: `true`)
+
+When act copies your working directory into a container, it reads `.gitignore` and skips matching files. Set this to `false` to copy all files including those excluded by `.gitignore`.
+
+```bash
+act --use-gitignore=false
+```
+
+## Image management
+
+### Force pull images
+
+**Flag:** `--pull` / `-p` (default: `true`)
+
+act pulls Docker images before each run even if they are already present locally. Set to `false` to use cached images without checking for updates.
+
+```bash
+act --pull=false
+act -p=false
+```
+
+<Note>
+  `--pull` is automatically set to `false` when `--action-offline-mode` is enabled.
+</Note>
+
+### Force rebuild local images
+
+**Flag:** `--rebuild` (default: `true`)
+
+act rebuilds Docker images defined in local `Dockerfile` actions on every run. Set to `false` to reuse previously built images.
+
+```bash
+act --rebuild=false
+```
+
+## Action cache
+
+**Flag:** `--action-cache-path <path>`
+
+Specifies the local directory where act downloads and caches action repositories. Defaults to a subdirectory of the platform cache directory (e.g., `~/.cache/act` on Linux).
+
+```bash
+act --action-cache-path /tmp/act-cache
+```
+
+Caching actions locally avoids re-downloading them on every run, which is especially useful for offline or bandwidth-constrained environments.

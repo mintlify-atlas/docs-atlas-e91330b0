@@ -1,0 +1,258 @@
+---
+title: "Troubleshooting"
+description: "Solutions to common problems when running GitHub Actions locally with act."
+---
+
+<AccordionGroup>
+
+  <Accordion title="Docker not found / cannot connect to Docker daemon">
+    act requires a running Docker daemon. If it cannot connect, you will see an error like:
+
+    ```
+    Couldn't get a valid docker connection: ...
+    ```
+
+    **Steps to resolve:**
+
+    1. Verify Docker is running:
+       ```bash
+       docker info
+       ```
+    2. If `DOCKER_HOST` is set, confirm it points to a valid daemon socket:
+       ```bash
+       echo $DOCKER_HOST
+       ```
+    3. If you are using Podman, Colima, or another Docker-compatible runtime, make sure the socket path is correct and use `--container-daemon-socket` to tell act where to find it:
+       ```bash
+       # Colima
+       act --container-daemon-socket unix://$HOME/.colima/docker.sock
+
+       # Podman (rootless)
+       act --container-daemon-socket unix://$XDG_RUNTIME_DIR/podman/podman.sock
+       ```
+    4. On Linux, ensure your user is in the `docker` group:
+       ```bash
+       sudo usermod -aG docker $USER
+       # Log out and back in for the change to take effect
+       ```
+  </Accordion>
+
+  <Accordion title="Apple M-series / ARM64 architecture issues">
+    On Apple Silicon (M1, M2, M3, and later), many Docker images are built for `linux/amd64` only. Running them on an ARM64 host can cause failures or unexpected behavior. act warns about this automatically:
+
+    ```
+    ⚠ You are using Apple M-series chip and you have not specified container architecture...
+    ```
+
+    **Resolution:** Force containers to use the `linux/amd64` platform via QEMU emulation:
+
+    ```bash
+    act --container-architecture linux/amd64
+    ```
+
+    Or add it to your `.actrc` to apply it permanently:
+
+    ```
+    --container-architecture linux/amd64
+    ```
+
+    <Note>
+      Emulation is slower than native execution. If the actions you run have ARM64-compatible images available, you can omit this flag for better performance, but compatibility with all actions is not guaranteed.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Action not found / cannot pull image">
+    If act fails when pulling a Docker image or fetching an action, you may see errors like:
+
+    ```
+    Error response from daemon: pull access denied
+    ```
+    or
+    ```
+    unable to resolve action
+    ```
+
+    **Common causes and fixes:**
+
+    - **No internet access.** act needs to reach Docker Hub and GitHub to pull images and actions on first use. Check your network connection and any proxy configuration.
+    - **Wrong image name in `-P` mapping.** Verify the image name and tag exist on Docker Hub or GHCR. Run `docker pull <image>:<tag>` separately to confirm.
+    - **Stale local image.** Force a fresh pull with `--pull`:
+      ```bash
+      act --pull
+      ```
+    - **Private action or image.** If the action or image is private, ensure `GITHUB_TOKEN` has access and that you are authenticated to any required container registry:
+      ```bash
+      docker login ghcr.io
+      ```
+  </Accordion>
+
+  <Accordion title="Workflow works on GitHub but fails locally">
+    Local execution differs from GitHub's hosted runners in several ways:
+
+    | Factor | GitHub runner | act (default) |
+    |---|---|---|
+    | Image | Full Ubuntu runner (~17 GB of tools) | Medium image (~500 MB) |
+    | Secrets | Set in repository settings | Must be passed via `--secret` or `--secret-file` |
+    | Permissions | Write access to GitHub APIs | Depends on `GITHUB_TOKEN` scope |
+    | Filesystem | Fresh clone from GitHub | Local working tree (may have uncommitted changes) |
+    | Services | All runner tools pre-installed | Only what's in your chosen image |
+
+    **Recommended steps:**
+
+    1. Switch to a `catthehacker/ubuntu:full-*` image to get a closer match to the GitHub runner environment.
+    2. Make sure all required secrets are provided locally.
+    3. Use `--no-skip-checkout` to have act clone the repository inside the container (matching GitHub's behavior) rather than copying local files.
+    4. Run `act --list` to confirm the correct jobs and event are selected.
+  </Accordion>
+
+  <Accordion title="GITHUB_TOKEN errors">
+    Actions that interact with the GitHub API (creating releases, posting comments, checking out private repos) require a valid `GITHUB_TOKEN`. Without it, you will see errors like:
+
+    ```
+    Error: Resource not accessible by integration
+    ```
+    or
+    ```
+    HttpError: Bad credentials
+    ```
+
+    **How to provide a token:**
+
+    ```bash
+    # Inline (using gh CLI to get your current token)
+    act -s GITHUB_TOKEN="$(gh auth token)"
+
+    # Via secret file (add to .secrets in your project root)
+    echo "GITHUB_TOKEN=ghp_your_token_here" >> .secrets
+    act
+    ```
+
+    <Warning>
+      Never commit your `.secrets` file to version control. Add it to `.gitignore`:
+      ```bash
+      echo ".secrets" >> .gitignore
+      ```
+    </Warning>
+
+    If `GITHUB_TOKEN` is not provided at all, act attempts to retrieve it from the `gh` CLI automatically. Install and authenticate with `gh` to enable this:
+
+    ```bash
+    gh auth login
+    ```
+  </Accordion>
+
+  <Accordion title="Container exits immediately">
+    A container that starts and then exits immediately (exit code 0 or a non-zero code with no output) usually indicates an image compatibility problem.
+
+    **Things to check:**
+
+    - The selected image is compatible with the runner label. Verify your `-P` mappings.
+    - The image supports the action's requirements. For example, if an action calls `python3` and the image doesn't include Python, it exits immediately with command-not-found (exit code 127).
+    - Check act output with `--verbose` to see the full Docker command:
+      ```bash
+      act --verbose
+      ```
+    - Try running the image manually to inspect it:
+      ```bash
+      docker run --rm -it catthehacker/ubuntu:act-latest bash
+      ```
+  </Accordion>
+
+  <Accordion title="act uses the wrong Docker socket">
+    On systems with multiple Docker-compatible runtimes (Docker Desktop, Colima, Podman, Rancher Desktop, etc.), act may pick up the wrong socket.
+
+    act searches for sockets in this order:
+    1. `DOCKER_HOST` environment variable (takes priority over all socket paths)
+    2. `/var/run/docker.sock`
+    3. `/run/podman/podman.sock`
+    4. `$HOME/.colima/docker.sock`
+    5. `$XDG_RUNTIME_DIR/docker.sock`
+    6. `$XDG_RUNTIME_DIR/podman/podman.sock`
+    7. `\\.\pipe\docker_engine` (Windows named pipe)
+    8. `$HOME/.docker/run/docker.sock`
+
+    **To force a specific socket:**
+
+    ```bash
+    act --container-daemon-socket unix:///path/to/your.sock
+    ```
+
+    Or set `DOCKER_HOST` in your shell:
+
+    ```bash
+    export DOCKER_HOST=unix://$HOME/.colima/docker.sock
+    act
+    ```
+
+    To prevent act from bind-mounting _any_ socket into the workflow containers, pass a dash:
+
+    ```bash
+    act --container-daemon-socket -
+    ```
+  </Accordion>
+
+  <Accordion title="Secrets showing in logs">
+    act masks secret values in log output by default, replacing them with `***`. If you explicitly passed `--insecure-secrets`, secrets are printed in plain text.
+
+    **What to do:**
+
+    - Remove `--insecure-secrets` from your command or `.actrc`.
+    - Do not use `--insecure-secrets` in any shared, CI, or production environment.
+    - If secrets were accidentally logged to a shared system, rotate the affected tokens immediately.
+
+    <Warning>
+      `--insecure-secrets` exists solely for local debugging when you need to confirm a secret's value is being passed correctly to a container. It is not safe to use in any environment where logs may be stored or shared.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="act is slow on the first run">
+    On the first run, act must pull the Docker image for your runner platform. Depending on the tier, this can range from a few hundred megabytes (Micro/Medium) to ~17 GB (Large).
+
+    **Options to speed up subsequent runs:**
+
+    - **Offline mode** — after the first pull succeeds, use `--action-offline-mode` to skip re-fetching actions and avoid pulling images again:
+      ```bash
+      act --action-offline-mode
+      ```
+    - **Disable pull** — if you know your local images are up to date:
+      ```bash
+      act --pull=false
+      ```
+    - **Reuse containers** — keep containers alive between runs to skip the container creation step:
+      ```bash
+      act --reuse
+      ```
+    - **Bind workdir** — copy is the default, but binding is faster for large repos:
+      ```bash
+      act --bind
+      ```
+  </Accordion>
+
+  <Accordion title="How to generate a bug report">
+    When filing an issue on the [nektos/act GitHub repository](https://github.com/nektos/act), include the output of:
+
+    ```bash
+    act --bug-report
+    ```
+
+    This command prints the following information without running any workflow:
+
+    - act version
+    - Host OS and architecture
+    - Number of CPUs
+    - `DOCKER_HOST` value
+    - Docker socket paths found on the system
+    - Active `.actrc` config files and their contents
+    - Go build info (module path, version, build settings)
+    - Docker engine details (version, runtime, cgroup driver, storage driver, OS info, security options)
+
+    Paste the full output into your GitHub issue to help maintainers reproduce the problem.
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Getting help
+
+If your issue is not covered here, search for it or start a discussion on the [nektos/act GitHub Discussions](https://github.com/nektos/act/discussions) page. Include the output of `act --bug-report` and the full error message when asking for help.

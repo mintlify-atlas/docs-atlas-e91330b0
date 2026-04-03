@@ -1,0 +1,175 @@
+---
+title: "Container Networking"
+description: "Configure how act containers connect to your network, the artifact server, and the cache server."
+---
+
+act runs each job inside a Docker container and provides configurable networking for those containers. It also starts a local artifact server and cache server that containers use to emulate GitHub's artifact and caching APIs.
+
+## Docker network mode
+
+**Flag:** `--network <name>` (default: `host`)
+
+Sets the Docker network that job containers are attached to. The value is passed directly to Docker as the network mode.
+
+```bash
+# Default: host network
+act --network host
+
+# Use Docker's built-in bridge network
+act --network bridge
+
+# Use a pre-existing user-defined network
+act --network my-custom-network
+```
+
+<Tabs>
+  <Tab title="host (default)">
+    Containers share the host's network stack. The container can reach any service running on `localhost` directly, and the host can reach any port the container listens on without port mapping.
+
+    This is the default because it makes act's built-in artifact and cache servers reachable from inside containers without additional configuration.
+  </Tab>
+  <Tab title="bridge">
+    Containers get their own network namespace with a virtual interface connected to a Docker bridge. Use this when you need isolation between the container and the host, or when testing services that bind to specific ports.
+
+    When using `bridge` mode, the artifact and cache servers may not be reachable from inside containers unless you configure their addresses explicitly.
+  </Tab>
+  <Tab title="custom network">
+    Use a named Docker network that you create yourself with `docker network create`. This is useful for multi-container workflows where you want containers to communicate with each other by service name.
+
+    ```bash
+    docker network create act-network
+    act --network act-network
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  When using a user-defined network (not `host`), Docker assigns containers their own IP addresses and they can communicate using network aliases. act configures network aliases automatically for service containers defined in your workflow.
+</Note>
+
+## DOCKER_HOST environment variable
+
+act reads the `DOCKER_HOST` environment variable to locate the Docker daemon. If set, it takes priority over the `--container-daemon-socket` flag's auto-detection logic.
+
+```bash
+# Connect to a remote Docker host
+DOCKER_HOST=tcp://192.168.1.100:2376 act
+
+# Connect via SSH tunnel
+DOCKER_HOST=ssh://user@remote-host act
+```
+
+You can verify which Docker host act is using by running `act --bug-report`, which prints the resolved `DOCKER_HOST` value alongside other system information.
+
+## Artifact server
+
+act starts a local HTTP server that emulates GitHub's artifact upload and download API. Workflow steps using `actions/upload-artifact` and `actions/download-artifact` talk to this server instead of GitHub.
+
+### Artifact server address
+
+**Flag:** `--artifact-server-addr <address>` (default: outbound IP of the host)
+
+The IP address or hostname the artifact server binds to. act defaults to the host's outbound IP address so containers can reach it.
+
+```bash
+act --artifact-server-addr 0.0.0.0
+act --artifact-server-addr 192.168.1.10
+```
+
+### Artifact server port
+
+**Flag:** `--artifact-server-port <port>` (default: `34567`)
+
+The port the artifact server listens on.
+
+```bash
+act --artifact-server-port 8080
+```
+
+### Artifact storage path
+
+**Flag:** `--artifact-server-path <path>` (default: disabled)
+
+The local directory where uploaded artifacts are stored. The artifact server does not start unless this flag is set.
+
+```bash
+act --artifact-server-path /tmp/act-artifacts
+```
+
+## Cache server
+
+act starts a local cache server that emulates the GitHub Actions cache API. This allows `actions/cache` to work without network access to GitHub.
+
+### Cache server address
+
+**Flag:** `--cache-server-addr <address>` (default: outbound IP of the host)
+
+The IP address the cache server binds to.
+
+```bash
+act --cache-server-addr 0.0.0.0
+```
+
+### Cache server port
+
+**Flag:** `--cache-server-port <port>` (default: random available port)
+
+The port the cache server listens on. Defaults to `0`, which tells the OS to pick a random available port.
+
+```bash
+act --cache-server-port 9000
+```
+
+### Cache server external URL
+
+**Flag:** `--cache-server-external-url <url>`
+
+Overrides the URL that act advertises to containers for reaching the cache server. Use this when act is running behind a reverse proxy or in an environment where the auto-detected address is not reachable from inside containers.
+
+```bash
+act --cache-server-external-url https://act-cache.example.com
+```
+
+<Warning>
+  Do not include a trailing slash in the external URL. The cache client inside containers appends paths to this URL directly.
+</Warning>
+
+### Disable cache server
+
+**Flag:** `--no-cache-server` (default: `false`)
+
+Prevents act from starting the local cache server entirely. Use this when you want to manage caching externally or when the cache server causes port conflicts.
+
+```bash
+act --no-cache-server
+```
+
+### Cache storage path
+
+**Flag:** `--cache-server-path <path>` (default: platform cache directory)
+
+The local directory where the cache server stores cached data. Defaults to a subdirectory of the platform cache directory (e.g., `~/.cache/actcache` on Linux).
+
+```bash
+act --cache-server-path /mnt/fast-storage/actcache
+```
+
+## Networking with custom Docker networks
+
+When you use a user-defined Docker network with `--network`, you may need to ensure that the artifact and cache servers are reachable from inside your containers. The recommended approach is to use `--artifact-server-addr` and `--cache-server-external-url` to point containers at an address that is accessible from within the network.
+
+```bash
+# Create a network
+docker network create act-net
+
+# Run act with the custom network and explicit server addresses
+act \
+  --network act-net \
+  --artifact-server-addr 172.20.0.1 \
+  --artifact-server-path /tmp/artifacts \
+  --cache-server-addr 172.20.0.1
+```
+
+<Tip>
+  To find the gateway IP of a Docker network, run `docker network inspect act-net` and look for the `Gateway` field under `IPAM.Config`.
+</Tip>

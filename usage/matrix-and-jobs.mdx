@@ -1,0 +1,194 @@
+---
+title: "Matrix Strategies and Jobs"
+description: "How act handles matrix strategies, job dependencies, concurrent execution, and job-level configuration options."
+---
+
+Act reproduces GitHub Actions' matrix and job execution model locally, including dependency-ordered stages, parallel job execution within a stage, and matrix filtering.
+
+## Matrix strategies
+
+A matrix strategy generates multiple job runs from a set of variable combinations. For example:
+
+```yaml
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-22.04]
+        node: [18, 20]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: node --version
+```
+
+This produces four job runs: every combination of `os` and `node`. Act computes the full Cartesian product (respecting `include` and `exclude` entries) and then applies your `--matrix` filters on top.
+
+### Filtering matrix combinations
+
+Use `--matrix key:value` to run only the matrix entries that match. Pass the flag multiple times to filter on multiple dimensions:
+
+```bash
+# run only the ubuntu-latest combinations
+act --matrix os:ubuntu-latest
+
+# run only ubuntu-latest with node 18
+act --matrix os:ubuntu-latest --matrix node:18
+```
+
+Act compares each matrix combination against the provided filter values. A combination is included only if every specified `key:value` filter matches an entry in that combination. Unspecified keys are not filtered — only dimensions you explicitly pass with `--matrix` are checked.
+
+<Note>
+`--matrix` filters the computed matrix product — it works with the values after `include` and `exclude` entries are applied by the planner.
+</Note>
+
+## Running specific jobs
+
+<Tabs>
+  <Tab title="Run one job">
+    Target a single job by its ID (the key under `jobs:` in the YAML):
+
+    ```bash
+    act -j build
+    act -j test
+    act -j lint
+    ```
+
+    When `-j` is specified, act builds a plan for that job alone, automatically including any jobs it depends on via `needs:`.
+  </Tab>
+  <Tab title="Run all jobs">
+    Without `-j`, act runs all jobs for the selected event:
+
+    ```bash
+    # all jobs triggered by push
+    act push
+
+    # all jobs regardless of event
+    act
+    ```
+  </Tab>
+</Tabs>
+
+## Job dependencies and execution order
+
+Act builds an execution plan from the `needs:` declarations in your workflow. The plan is a series of **stages**:
+
+- **Stages run serially** — stage 2 starts only after all jobs in stage 1 have completed.
+- **Jobs within a stage run in parallel** — jobs that have no dependency on each other are grouped into the same stage.
+
+```yaml
+jobs:
+  build:       # stage 1 — no needs
+    ...
+  test:        # stage 2 — needs build
+    needs: build
+    ...
+  lint:        # stage 1 — no needs, runs in parallel with build
+    ...
+  deploy:      # stage 3 — needs both test and lint
+    needs: [test, lint]
+    ...
+```
+
+In this example, `build` and `lint` run in parallel (stage 1), then `test` runs (stage 2), then `deploy` runs (stage 3).
+
+The stage construction algorithm in `pkg/model/planner.go` works by repeatedly selecting jobs whose dependencies are all satisfied by already-completed stages:
+
+```go
+// createStages — from pkg/model/planner.go
+stages := make([]*Stage, 0)
+for len(jobDependencies) > 0 {
+    stage := new(Stage)
+    for jID, jDeps := range jobDependencies {
+        // include this job if all its deps are already in a prior stage
+        if listInStages(jDeps, stages...) {
+            stage.Runs = append(stage.Runs, &Run{Workflow: w, JobID: jID})
+            delete(jobDependencies, jID)
+        }
+    }
+    stages = append(stages, stage)
+}
+```
+
+## Concurrent job execution
+
+Within a stage, act runs jobs in parallel. The concurrency limit applies across all jobs in the stage:
+
+```bash
+# set maximum parallel jobs to 4
+act --concurrent-jobs 4
+
+# force serial execution
+act --concurrent-jobs 1
+```
+
+The default concurrency is the number of logical CPUs on the host:
+
+```go
+// from pkg/runner/runner.go
+func (config *Config) GetConcurrentJobs() int {
+    if config.ConcurrentJobs >= 1 {
+        return config.ConcurrentJobs
+    }
+    ncpu := runtime.NumCPU()
+    if ncpu > 1 {
+        return ncpu
+    }
+    return 1
+}
+```
+
+The per-job `max-parallel` setting in the workflow's `strategy:` block also caps parallelism within a matrix job. Act defaults `max-parallel` to `4` when not explicitly set.
+
+## Additional job configuration
+
+<CardGroup cols={2}>
+  <Card title="Actor" icon="user">
+    Set the username that appears as the workflow trigger actor — available in workflows as `${{ github.actor }}`:
+
+    ```bash
+    act --actor octocat
+    act -a octocat
+    ```
+
+    Default: `nektos/act`
+  </Card>
+  <Card title="Default branch" icon="git-branch">
+    Override the repository's default branch name. Sets `event.repository.default_branch` in the event payload and is used to derive `GITHUB_REF` when no git ref can be determined locally:
+
+    ```bash
+    act --defaultbranch main
+    act --defaultbranch develop
+    ```
+  </Card>
+  <Card title="Remote name" icon="cloud">
+    Specify which git remote act reads to determine the repository URL:
+
+    ```bash
+    act --remote-name upstream
+    ```
+
+    Default: `origin`
+  </Card>
+  <Card title="No-skip checkout" icon="download">
+    By default, act copies local files into the container directly instead of running `actions/checkout`. Use this flag to force `actions/checkout` to run normally:
+
+    ```bash
+    act --no-skip-checkout
+    ```
+
+    Useful when your workflow relies on `actions/checkout` side-effects such as setting `GITHUB_WORKSPACE` or fetching git history.
+  </Card>
+</CardGroup>
+
+## Reusing containers
+
+By default, act removes job containers when a workflow completes successfully. Use `--reuse` to keep containers alive between runs, which preserves any state written to the container filesystem:
+
+```bash
+act --reuse
+act -r
+```
+
+<Warning>
+Reused containers may have stale state from previous runs. If you observe unexpected behavior, remove the containers manually with `docker rm` or run act without `--reuse`.
+</Warning>

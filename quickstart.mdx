@@ -1,80 +1,129 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Run your first GitHub Actions workflow locally with act in a few minutes."
 ---
 
-## Get started in three steps
+## Run your first workflow
 
-Get your documentation site running locally and make your first customization.
+<Steps>
+  <Step title="Install act">
+    Follow the [installation guide](/installation) to install act and confirm Docker is running.
 
-### Step 1: Set up your local environment
+    ```bash
+    act --version
+    ```
+  </Step>
+  <Step title="Navigate to a repository with workflows">
+    `act` looks for workflow files in `.github/workflows/` relative to your current directory.
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash
+    cd /path/to/your/repo
+    ls .github/workflows/
+    ```
 
-### Step 2: Deploy your changes
+    If you don't have a repository with workflows yet, create a minimal one:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    mkdir -p .github/workflows
+    cat > .github/workflows/hello.yml << 'EOF'
+    name: Hello
+    on: push
+    jobs:
+      greet:
+        runs-on: ubuntu-latest
+        steps:
+          - run: echo "Hello from act!"
+    EOF
+    ```
+  </Step>
+  <Step title="Run act">
+    With no arguments, `act` triggers the `push` event and runs all jobs that respond to it.
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    act
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    If your workflows only define one event, act uses that event automatically instead of defaulting to `push`.
+  </Step>
+  <Step title="Choose a Docker image size">
+    On the first run, act asks which Docker image size to use as the default runner environment. This setting is saved to your `.actrc` config file and used for future runs.
 
-### Step 3: Go live
+    ```
+    Please choose the default image you want to use with act:
+      - Large size image: ca. 17GB download + 53.1GB storage...
+      - Medium size image: ~500MB, includes only necessary tools...
+      - Micro size image: <200MB, contains only NodeJS...
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    Default: Medium
+    ```
 
-## Next steps
+    | Size | Approximate download | Contents |
+    |---|---|---|
+    | Large | ~17 GB | Snapshots of GitHub-hosted runners (`catthehacker/ubuntu:full-*`). Most compatible. |
+    | Medium | ~500 MB | Tools needed to bootstrap actions (`catthehacker/ubuntu:act-*`). Compatible with most actions. |
+    | Micro | &lt;200 MB | Node.js only (`node:16-buster-slim`). Fastest, but many actions will not work. |
 
-Now that you have your docs running, explore these key features:
+    <Tip>
+      Medium is the best starting point for most workflows. It downloads quickly and supports the majority of common actions. Switch to Large only if you encounter compatibility issues that Medium cannot resolve.
+    </Tip>
+  </Step>
+  <Step title="Watch the workflow execute">
+    act streams step output to your terminal in real time, with color-coded job names. A successful run ends with a summary similar to:
 
-<CardGroup cols={2}>
+    ```
+    [Hello/greet] 🐳 docker pull image=node:16-buster-slim ...
+    [Hello/greet]   ✅  Success - Main echo "Hello from act!"
+    [Hello/greet] 🏁  Job succeeded
+    ```
+  </Step>
+</Steps>
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+## Common commands
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+**List all workflows and jobs**
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+```bash
+act --list
+```
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+This prints a table of every job defined in your workflows along with the event that triggers it and the runner label it requires.
 
-</CardGroup>
+**Run a specific job**
+
+```bash
+act -j <job-id>
+```
+
+Replace `<job-id>` with the job identifier from `act --list`. This runs only that job, regardless of which event triggers it.
+
+**Trigger a specific event**
+
+```bash
+# Trigger the push event (default)
+act push
+
+# Trigger a pull_request event
+act pull_request
+```
+
+Pass the event name as the first argument. `act` runs all jobs that are triggered by that event.
+
+## Persisting settings with .actrc
+
+act reads configuration from `.actrc` files in the following order:
+
+1. XDG config directory (e.g., `~/.config/act/actrc` on Linux)
+2. `~/.actrc` in your home directory
+3. `.actrc` in the directory where you run `act`
+
+Each line in an `.actrc` file is treated as a CLI flag. For example, to set a default platform mapping without typing it every time:
+
+```
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+-P ubuntu-20.04=catthehacker/ubuntu:act-20.04
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  The first-run image survey writes your selection to the XDG config directory path automatically. You can edit the file at any time to change the default image or add other persistent flags.
 </Note>

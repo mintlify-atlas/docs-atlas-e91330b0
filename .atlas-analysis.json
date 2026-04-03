@@ -1,0 +1,95 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "act",
+  "projectDescription": "Run your GitHub Actions locally using Docker to get fast feedback and use workflows as a local task runner.",
+  "theme": "aspen",
+  "primaryColor": "#343434",
+  "lightColor": "#284b5c",
+  "darkColor": "#9a7354",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Usage",
+            "pages": [
+              "usage/running-workflows",
+              "usage/events",
+              "usage/secrets-and-vars",
+              "usage/matrix-and-jobs"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/actrc",
+              "configuration/platforms-and-images",
+              "configuration/container-options",
+              "configuration/networking"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/artifact-support",
+              "advanced/cache-support",
+              "advanced/github-enterprise",
+              "advanced/offline-mode"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/cli-flags",
+              "reference/environment-variables",
+              "reference/docker-images",
+              "reference/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Run GitHub Actions workflows locally without pushing to GitHub",
+    "Docker-based execution matching GitHub's hosted runner environment",
+    "Support for secrets, vars, and environment variables",
+    "Matrix strategy support for parallel job execution",
+    "Built-in artifact and cache server emulation",
+    "Watch mode for automatic re-runs on file changes",
+    "GitHub Enterprise Server support",
+    "Offline mode with local action caching",
+    "Custom platform/image mapping per runner type",
+    "Expression language interpreter for ${{ }} syntax"
+  ],
+  "publicApiSurface": [
+    "act [event] — run workflows for a given event (default: push)",
+    "act -l / --list — list all workflows and jobs",
+    "act -g / --graph — draw the workflow dependency graph",
+    "act -j <job-id> — run a specific job by ID",
+    "act -w / --watch — watch for file changes and re-run",
+    "act -s / --secret — pass secrets to workflows",
+    "act --var — pass variables to workflows",
+    "act -P / --platform — map runner label to Docker image",
+    "act -e / --eventpath — specify event JSON payload file",
+    "act --validate — validate workflow YAML files",
+    "act --dryrun — validate without running containers",
+    "act --artifact-server-path — enable artifact server",
+    "act --cache-server-path — enable cache server",
+    "act --container-architecture — set container CPU arch",
+    "act --github-instance — use GitHub Enterprise Server",
+    "act --matrix — filter matrix configurations",
+    "act --local-repository — map action repos to local paths",
+    "act --action-offline-mode — use cached actions offline",
+    ".actrc configuration file"
+  ]
+}

@@ -1,0 +1,117 @@
+---
+title: "The .actrc Configuration File"
+description: "Persist act flags across runs using a .actrc configuration file instead of typing them on every invocation."
+---
+
+The `.actrc` file lets you store any act CLI flag persistently so you don't have to repeat it on every run. act reads this file on startup and prepends its contents to the flags you pass on the command line, so flags in `.actrc` can always be overridden at runtime.
+
+## File locations
+
+act searches for `.actrc` files in three locations and applies all of them in order. Later files take precedence over earlier ones, and command-line flags take precedence over everything.
+
+| Priority | Location | Path |
+|----------|----------|------|
+| 1 (lowest) | XDG config directory | `~/.config/act/actrc` (Linux) |
+| 2 | Home directory | `~/.actrc` |
+| 3 (highest) | Current directory | `.actrc` |
+
+<Note>
+  On macOS, the XDG config path resolves to `~/Library/Application Support/act/actrc`. On Windows it resolves to `%AppData%\act\actrc`. The `adrg/xdg` library handles platform-specific paths automatically.
+</Note>
+
+All three files are loaded if they exist. act appends their arguments together, then appends the flags you pass on the command line.
+
+## File format
+
+Each line in `.actrc` contains a single flag exactly as you would type it on the command line. Flags that take a value must have the flag and the value on the same line, separated by a space.
+
+```text .actrc
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+-P ubuntu-20.04=catthehacker/ubuntu:act-20.04
+--secret-file .secrets
+--env-file .env
+```
+
+<Tip>
+  You can use environment variable expansion in `.actrc`. Values like `$HOME` or `${CUSTOM_VAR}` are expanded when act reads the file.
+</Tip>
+
+Blank lines and lines that do not start with `-` are ignored when act splits arguments, so you can use them for readability if needed.
+
+## First-run prompt
+
+When you run act for the first time without any `-P` platform flags and without an existing `.actrc` file, act prompts you to choose a default image size:
+
+```
+Please choose the default image you want to use with act:
+  - Large size image: ca. 17GB download + 53.1GB storage, ...
+  - Medium size image: ~500MB, includes only necessary tools to bootstrap actions ...
+  - Micro size image: <200MB, contains only NodeJS required to bootstrap actions ...
+```
+
+Based on your selection, act writes the corresponding `-P` platform mappings to `~/.config/act/actrc` (the XDG config location). You can edit this file at any time to change the defaults.
+
+<Steps>
+  <Step title="Run act for the first time">
+    Run `act` in any repository with a `.github/workflows/` directory.
+  </Step>
+  <Step title="Choose an image size">
+    Select **Large**, **Medium**, or **Micro** when prompted. See [Platforms and Docker Images](/configuration/platforms-and-images) for a full comparison of the tiers.
+  </Step>
+  <Step title="act writes .actrc">
+    act creates `~/.config/act/actrc` with the appropriate `-P` flags for all common Ubuntu runner labels.
+  </Step>
+  <Step title="Edit .actrc as needed">
+    Open the file in any editor and add additional flags such as `--secret-file` or `--env-file`.
+  </Step>
+</Steps>
+
+## Example .actrc files
+
+<Tabs>
+  <Tab title="Medium images (recommended)">
+    ```text .actrc
+    -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    -P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+    -P ubuntu-20.04=catthehacker/ubuntu:act-20.04
+    -P ubuntu-18.04=catthehacker/ubuntu:act-18.04
+    --secret-file .secrets
+    --env-file .env
+    ```
+  </Tab>
+  <Tab title="Large images">
+    ```text .actrc
+    -P ubuntu-latest=catthehacker/ubuntu:full-latest
+    -P ubuntu-22.04=catthehacker/ubuntu:full-22.04
+    -P ubuntu-20.04=catthehacker/ubuntu:full-20.04
+    -P ubuntu-18.04=catthehacker/ubuntu:full-18.04
+    ```
+  </Tab>
+  <Tab title="Micro images">
+    ```text .actrc
+    -P ubuntu-latest=node:16-buster-slim
+    -P ubuntu-22.04=node:16-bullseye-slim
+    -P ubuntu-20.04=node:16-buster-slim
+    -P ubuntu-18.04=node:16-buster-slim
+    ```
+  </Tab>
+</Tabs>
+
+## Common flags to persist
+
+Any flag accepted by `act` can go in `.actrc`. The following are commonly added:
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `-P <label>=<image>` | (none) | Map a runner label to a Docker image |
+| `--secret-file` | `.secrets` | File to read secrets from |
+| `--env-file` | `.env` | File to read environment variables from |
+| `--var-file` | `.vars` | File to read workflow variables from |
+| `--container-architecture` | (host arch) | Force container CPU architecture |
+| `--network` | `host` | Docker network mode for job containers |
+| `--container-daemon-socket` | (auto) | Path to Docker daemon socket |
+
+<Warning>
+  Do not store sensitive values such as tokens or passwords directly in `.actrc`. Use `--secret-file` pointing to a file that is excluded from version control, or pass secrets on the command line with `-s`.
+</Warning>
